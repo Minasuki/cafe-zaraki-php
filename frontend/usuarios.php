@@ -1,12 +1,12 @@
 <?php
 session_start();
 require_once __DIR__ . '/../backend/auth.php';
-require_once __DIR__ . '/../backend/config.php';
 
-if (!tienePermiso('usuarios')) {
+if (!tienePermiso('gestionar_usuarios')) {
     header('Location: dashboard.php');
     exit;
 }
+require_once __DIR__ . '/../backend/config.php';
 
 $mensaje = '';
 $usuario_editar = null;
@@ -25,31 +25,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'];
     $rol_id = (int)$_POST['rol_id'];
     $id_editar = $_POST['id_editar'] ?? null;
+    
+    // Capturar el arreglo de permisos y convertirlo a string (ej: "ver_ordenes,cobrar")
+    $permisos_array = $_POST['permisos'] ?? []; 
+    $permisos_string = implode(',', $permisos_array);
 
     try {
         if ($id_editar) {
             // ES UNA EDICIÓN
             if (!empty($password)) {
-                // Si escribió una contraseña nueva, la actualizamos
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("UPDATE usuarios SET username=:u, nombre_completo=:n, password_hash=:h, rol_id=:r WHERE id=:id");
-                $stmt->execute([':u' => $username, ':n' => $nombre, ':h' => $hash, ':r' => $rol_id, ':id' => $id_editar]);
+                $stmt = $pdo->prepare("UPDATE usuarios SET username=:u, nombre_completo=:n, password_hash=:h, rol_id=:r, permisos=:p WHERE id=:id");
+                $stmt->execute([':u' => $username, ':n' => $nombre, ':h' => $hash, ':r' => $rol_id, ':p' => $permisos_string, ':id' => $id_editar]);
             } else {
-                // Si dejó la contraseña en blanco, no la tocamos
-                $stmt = $pdo->prepare("UPDATE usuarios SET username=:u, nombre_completo=:n, rol_id=:r WHERE id=:id");
-                $stmt->execute([':u' => $username, ':n' => $nombre, ':r' => $rol_id, ':id' => $id_editar]);
+                $stmt = $pdo->prepare("UPDATE usuarios SET username=:u, nombre_completo=:n, rol_id=:r, permisos=:p WHERE id=:id");
+                $stmt->execute([':u' => $username, ':n' => $nombre, ':r' => $rol_id, ':p' => $permisos_string, ':id' => $id_editar]);
             }
             $mensaje = "✅ Usuario actualizado exitosamente.";
-            $usuario_editar = null; // Limpiamos el formulario
+            $usuario_editar = null;
         } else {
             // ES UNA CREACIÓN NUEVA
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("INSERT INTO usuarios (username, password_hash, nombre_completo, rol_id) VALUES (:u, :h, :n, :r)");
-            $stmt->execute([':u' => $username, ':h' => $hash, ':n' => $nombre, ':r' => $rol_id]);
-            $mensaje = "✅ Usuario creado exitosamente. Se le asignaron privilegios por defecto.";
+            $stmt = $pdo->prepare("INSERT INTO usuarios (username, password_hash, nombre_completo, rol_id, permisos) VALUES (:u, :h, :n, :r, :p)");
+            $stmt->execute([':u' => $username, ':h' => $hash, ':n' => $nombre, ':r' => $rol_id, ':p' => $permisos_string]);
+            $mensaje = "✅ Usuario creado exitosamente.";
         }
     } catch (Exception $e) {
-        $mensaje = "❌ Error: El nombre de usuario ya existe o hubo un problema.";
+        // AHORA MOSTRAMOS EL ERROR REAL
+        $mensaje = "❌ Error: " . $e->getMessage();
     }
 }
 
@@ -57,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmtU = $pdo->query("SELECT u.id, u.username, u.nombre_completo, r.nombre AS rol FROM usuarios u JOIN roles r ON u.rol_id = r.id ORDER BY u.id DESC");
 $usuarios = $stmtU->fetchAll();
 
-// Obtener SOLO los roles admin y empleado (Filtro solicitado)
+// Obtener SOLO los roles admin y empleado
 $roles = $pdo->query("SELECT * FROM roles WHERE nombre IN ('admin', 'empleado')")->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -75,6 +78,7 @@ $roles = $pdo->query("SELECT * FROM roles WHERE nombre IN ('admin', 'empleado')"
         .form-group label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; }
         .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
         .alert { background: #e8f5e9; color: #2e7d32; padding: 10px; border-radius: 6px; margin-bottom: 15px; }
+        .alert-error { background: #ffebee; color: #c62828; }
         .btn-edit { background: #2196f3; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85rem; }
         .form-edicion { background: #fff3e0; border: 2px solid #ff9800; }
     </style>
@@ -84,14 +88,15 @@ $roles = $pdo->query("SELECT * FROM roles WHERE nombre IN ('admin', 'empleado')"
 
     <main class="container">
         <?php if ($mensaje): ?>
-            <div class="alert"><?= htmlspecialchars($mensaje) ?></div>
+            <div class="alert <?= strpos($mensaje, '❌') !== false ? 'alert-error' : '' ?>">
+                <?= htmlspecialchars($mensaje) ?>
+            </div>
         <?php endif; ?>
 
         <div class="card <?= $usuario_editar ? 'form-edicion' : '' ?>">
             <h3><?= $usuario_editar ? '✏️ Editando Usuario: ' . htmlspecialchars($usuario_editar['username']) : '➕ Crear Nuevo Usuario' ?></h3>
             
             <form method="POST" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <!-- Campo oculto para saber si estamos editando -->
                 <?php if ($usuario_editar): ?>
                     <input type="hidden" name="id_editar" value="<?= $usuario_editar['id'] ?>">
                 <?php endif; ?>
@@ -119,6 +124,33 @@ $roles = $pdo->query("SELECT * FROM roles WHERE nombre IN ('admin', 'empleado')"
                         <?php endforeach; ?>
                     </select>
                 </div>
+
+                <!-- SECCIÓN DE PERMISOS GRANULARES -->
+                <div class="form-group" style="grid-column: span 2; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                    <label style="margin-bottom: 10px; display: block; color: #333;">Privilegios Específicos (Nivel Tabla/Acción)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                        <?php 
+                            $permisos_actuales = $usuario_editar ? explode(',', $usuario_editar['permisos'] ?? '') : [];
+                            $todos_los_permisos = [
+                                'ver_ordenes' => 'Ver Panel de Órdenes',
+                                'cobrar' => 'Cobrar y Cancelar',
+                                'ver_reportes' => 'Ver Reportes',
+                                'gestionar_inventario' => 'Modificar Inventario',
+                                'gestionar_productos' => 'CRUD de Productos',
+                                'gestionar_usuarios' => 'Gestión de Usuarios'
+                            ];
+
+                            foreach($todos_los_permisos as $valor => $etiqueta):
+                                $checked = in_array($valor, $permisos_actuales) ? 'checked' : '';
+                        ?>
+                            <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; font-size: 0.85rem;">
+                                <input type="checkbox" name="permisos[]" value="<?= $valor ?>" <?= $checked ?>>
+                                <?= $etiqueta ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
                 <div style="grid-column: span 2; display: flex; gap: 10px;">
                     <button type="submit" class="btn-success" style="flex-grow: 1; padding: 12px;">
                         <?= $usuario_editar ? 'Guardar Cambios' : 'Crear Usuario' ?>
@@ -138,7 +170,7 @@ $roles = $pdo->query("SELECT * FROM roles WHERE nombre IN ('admin', 'empleado')"
                         <th>ID</th>
                         <th>Usuario</th>
                         <th>Nombre Real</th>
-                        <th>Rol</th>
+                        <th>Rol Base</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>

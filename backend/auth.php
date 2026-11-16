@@ -3,12 +3,18 @@ function tienePermiso($permiso) {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
-    $rol = $_SESSION['usuario_rol'] ?? 'invitado';
     
-    $permisos = [
-        'admin' => ['crear', 'editar', 'archivar', 'ver', 'cobrar', 'usuarios'],
-        'empleado' => ['ver', 'cobrar']
-    ];
+    // Si no hay permisos en sesión, denegamos todo por seguridad
+    if (!isset($_SESSION['usuario_permisos']) || empty($_SESSION['usuario_permisos'])) {
+        return false;
+    }
 
-    return in_array($permiso, $permisos[$rol] ?? []);
+    // Convertimos la cadena "ver_ordenes,cobrar" en un arreglo
+    $permisos_usuario = explode(',', $_SESSION['usuario_permisos']);
+    
+    // Limpiamos espacios en blanco por si acaso
+    $permisos_usuario = array_map('trim', $permisos_usuario);
+
+    return in_array($permiso, $permisos_usuario);
 }
+?>

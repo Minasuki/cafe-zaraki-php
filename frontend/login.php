@@ -16,20 +16,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if ($username && $password) {
-        $stmt = $pdo->prepare("
-            SELECT u.*, r.nombre AS rol_nombre 
-            FROM usuarios u 
-            JOIN roles r ON u.rol_id = r.id 
-            WHERE u.username = :username AND u.activo = TRUE
-        ");
+        $stmt = $pdo->prepare("SELECT u.*, r.nombre AS rol_nombre FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE u.username = :username AND u.activo = TRUE");
         $stmt->execute([':username' => $username]);
         $usuario = $stmt->fetch();
 
         if ($usuario && password_verify($password, $usuario['password_hash'])) {
-            // Login exitoso
             $_SESSION['usuario_id'] = $usuario['id'];
             $_SESSION['usuario_nombre'] = $usuario['nombre_completo'];
             $_SESSION['usuario_rol'] = $usuario['rol_nombre'];
+            $_SESSION['usuario_permisos'] = $usuario['permisos']; // <-- NUEVO
 
             header('Location: dashboard.php');
             exit;
