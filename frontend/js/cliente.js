@@ -152,7 +152,7 @@ function renderProductosLista(lista) {
     .join("");
 }
 
-// 4. LÓGICA DEL CARRITO (Se mantiene igual)
+// 4. LÓGICA DEL CARRITO
 function agregarAlCarrito(productId, indexCarrito = null) {
   const producto = productos.find((p) => p.id === productId);
   if (!producto) return;

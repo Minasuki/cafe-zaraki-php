@@ -11,7 +11,7 @@ require_once __DIR__ . '/../backend/auth.php';
 <header style="display: flex; justify-content: space-between; align-items: center; background: var(--color-espresso); padding: 15px 24px; color: white;">
     <div>
         <h1 style="font-size: 1.5rem; margin: 0;">☕ Café Zaraki</h1>
-        <div style="font-size: 0.85rem; opacity: 0.75;">Panel Administrativo</div>
+        <div style="font-size: 0.85rem; opacity: 0.75;">Panel Administrativo 123</div>
     </div>
     <nav style="display: flex; gap: 10px; align-items: center;">
         <?php if (isset($_SESSION['usuario_id'])): ?>
